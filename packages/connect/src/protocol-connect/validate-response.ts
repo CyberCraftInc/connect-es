@@ -38,29 +38,34 @@ export function validateResponse(
 ):
   | { isUnaryError: false; unaryError?: undefined }
   | { isUnaryError: true; unaryError: ConnectError } {
-  const mimeType = headers.get("Content-Type");
-  const parsedType = parseContentType(mimeType);
-  if (status !== 200) {
-    const errorFromStatus = new ConnectError(
-      `HTTP ${status}`,
-      codeFromHttpStatus(status)
-    );
-    if (methodKind == MethodKind.Unary && parsedType && !parsedType.stream) {
-      return { isUnaryError: true, unaryError: errorFromStatus };
+  let error = null;
+
+  headers.get("Content-Type")?.split(", ").forEach((mimeType) => {
+    const parsedType = parseContentType(mimeType);
+    if (status !== 200) {
+      const errorFromStatus = new ConnectError(
+        `HTTP ${status}`,
+        codeFromHttpStatus(status)
+      );
+      if (methodKind == MethodKind.Unary && parsedType && !parsedType.stream) {
+        return { isUnaryError: true, unaryError: errorFromStatus };
+      }
+      error = errorFromStatus;
     }
-    throw errorFromStatus;
-  }
-  const isStream = methodKind != MethodKind.Unary;
-  if (
-    !parsedType ||
-    parsedType.binary != useBinaryFormat ||
-    parsedType.stream != isStream
-  ) {
-    throw new ConnectError(
-      `unexpected response content type "${mimeType ?? "?"}"`,
-      Code.InvalidArgument
-    );
-  }
+    const isStream = methodKind != MethodKind.Unary;
+    if (
+      !parsedType ||
+      parsedType.binary != useBinaryFormat ||
+      parsedType.stream != isStream
+    ) {
+      error = new ConnectError(
+        `unexpected response content type "${mimeType ?? "?"}"`,
+        Code.InvalidArgument
+      );
+    }
+    return { isUnaryError: false };
+  })
+  if (error) throw error
   return { isUnaryError: false };
 }
 
